@@ -55,7 +55,7 @@ pub fn run(config: &Config, shared_rect: Arc<AtomicRect>) -> Result<()> {
 
     app.connect_activate(move |app| {
         if let Err(e) = build_ui(app, &config, rect.clone()) {
-            log::error!("Failed to build UI: {}", e);
+            tracing::error!("Failed to build UI: {}", e);
         }
     });
 

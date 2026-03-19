@@ -6,6 +6,8 @@ use pipewire as pw;
 use pw::spa;
 use pw::spa::pod::Pod;
 
+use tracing::instrument;
+
 use crate::config::Config;
 
 /// Result of portal negotiation: the PipeWire fd and node ID to connect to.
@@ -24,6 +26,7 @@ pub struct Frame {
 }
 
 /// Negotiate a screen capture session via XDG Desktop Portal.
+#[instrument(skip(config))]
 pub async fn create_session(config: &Config) -> Result<CaptureSession> {
     use ashpd::desktop::PersistMode;
     use ashpd::desktop::screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType};
@@ -68,7 +71,7 @@ pub async fn create_session(config: &Config) -> Result<CaptureSession> {
     let node_id = stream.pipe_wire_node_id();
     let restore_token = response.restore_token().map(String::from);
 
-    log::info!("Portal session started: node_id={}, size={:?}", node_id, stream.size());
+    tracing::info!("Portal session started: node_id={}, size={:?}", node_id, stream.size());
 
     let fd = proxy
         .open_pipe_wire_remote(&session, Default::default())
@@ -90,6 +93,7 @@ struct StreamUserData {
 }
 
 /// Run the PipeWire capture loop, sending frames to the provided channel.
+#[instrument(skip(session, frame_tx))]
 pub fn run_pipewire_stream(session: CaptureSession, frame_tx: mpsc::SyncSender<Frame>) -> Result<()> {
     pw::init();
 
@@ -120,7 +124,7 @@ pub fn run_pipewire_stream(session: CaptureSession, frame_tx: mpsc::SyncSender<F
     let listener = stream
         .add_local_listener_with_user_data(user_data)
         .state_changed(|_, _, old, new| {
-            log::info!("PipeWire stream state: {:?} -> {:?}", old, new);
+            tracing::info!("PipeWire stream state: {:?} -> {:?}", old, new);
         })
         .param_changed(|_, state, id, param| {
             let Some(param) = param else { return };
@@ -136,13 +140,13 @@ pub fn run_pipewire_stream(session: CaptureSession, frame_tx: mpsc::SyncSender<F
                 return;
             }
             if let Err(e) = state.format.parse(param) {
-                log::error!("Failed to parse video format: {}", e);
+                tracing::error!("Failed to parse video format: {}", e);
                 return;
             }
             let size = state.format.size();
             state.width = size.width;
             state.height = size.height;
-            log::info!(
+            tracing::info!(
                 "Negotiated format: {:?} {}x{} @ {}/{}fps",
                 state.format.format(),
                 size.width,
@@ -252,7 +256,7 @@ pub fn run_pipewire_stream(session: CaptureSession, frame_tx: mpsc::SyncSender<F
         )
         .context("Failed to connect PipeWire stream")?;
 
-    log::info!("PipeWire stream connected, entering main loop");
+    tracing::info!("PipeWire stream connected, entering main loop");
     mainloop.run();
 
     // Listener must stay alive for the duration of the mainloop

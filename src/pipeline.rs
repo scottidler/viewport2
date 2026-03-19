@@ -2,11 +2,14 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use tracing::instrument;
+
 use crate::capture::Frame;
 use crate::convert;
 use crate::output;
 use crate::rect::AtomicRect;
 
+#[derive(Debug)]
 pub struct PipelineConfig {
     pub device: String,
     pub output_width: u32,
@@ -16,11 +19,12 @@ pub struct PipelineConfig {
 
 /// Run the frame processing pipeline: crop -> resize -> convert -> write.
 /// Blocks until the frame channel is closed (sender dropped).
+#[instrument(skip(frame_rx, shared_rect), fields(device = %config.device, output = format!("{}x{}", config.output_width, config.output_height)))]
 pub fn run(config: PipelineConfig, frame_rx: mpsc::Receiver<Frame>, shared_rect: Arc<AtomicRect>) {
     let mut v4l2 = match output::V4l2Output::open(&config.device, config.output_width, config.output_height) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("Failed to open v4l2loopback: {}", e);
+            tracing::error!("Failed to open v4l2loopback: {}", e);
             return;
         }
     };
@@ -61,13 +65,13 @@ pub fn run(config: PipelineConfig, frame_rx: mpsc::Receiver<Frame>, shared_rect:
 
         // Write to v4l2loopback device
         if let Err(e) = v4l2.write_frame(&yuyv_buf) {
-            log::error!("Failed to write frame: {}", e);
+            tracing::error!("Failed to write frame: {}", e);
             break;
         }
 
         count += 1;
         if count.is_multiple_of(30) {
-            log::info!(
+            tracing::info!(
                 "Written {} frames (crop {}x{} at {},{} -> {}x{})",
                 count,
                 crop_rect.width,

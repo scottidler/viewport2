@@ -3,6 +3,7 @@ use std::io::Write;
 use std::os::fd::AsRawFd;
 
 use eyre::{Context, Result};
+use tracing::instrument;
 
 // V4L2 constants
 const V4L2_BUF_TYPE_VIDEO_OUTPUT: u32 = 2;
@@ -48,6 +49,7 @@ pub struct V4l2Output {
 
 impl V4l2Output {
     /// Open a v4l2loopback device and set YUYV format at the given resolution.
+    #[instrument(skip_all, fields(device, width, height))]
     pub fn open(device: &str, width: u32, height: u32) -> Result<Self> {
         let file = OpenOptions::new().write(true).open(device).context(format!(
             "Failed to open v4l2loopback device '{}' - is the module loaded?",
@@ -80,7 +82,7 @@ impl V4l2Output {
         unsafe { vidioc_s_fmt(file.as_raw_fd(), &mut fmt) }
             .context("VIDIOC_S_FMT failed - is v4l2loopback loaded and is the device path correct?")?;
 
-        log::info!(
+        tracing::info!(
             "v4l2loopback device '{}' configured: {}x{} YUYV ({} bytes/frame)",
             device,
             width,

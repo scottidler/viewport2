@@ -33,7 +33,7 @@ pub struct Cli {
     #[arg(long)]
     pub border_width: Option<u32>,
 
-    /// Enable verbose output
+    /// Log level (trace, debug, info, warn, error)
     #[arg(short, long)]
-    pub verbose: bool,
+    pub log_level: Option<String>,
 }

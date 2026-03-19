@@ -2,18 +2,18 @@
 #![deny(dead_code)]
 #![deny(unused_variables)]
 
+use std::fs;
 use std::sync::mpsc;
 
 use clap::Parser;
 use eyre::{Context, Result};
-use log::info;
-use std::fs;
-use std::path::PathBuf;
+use tracing::instrument;
 
 mod capture;
 mod cli;
 mod config;
 mod convert;
+mod logging;
 mod output;
 mod overlay;
 mod pipeline;
@@ -23,34 +23,8 @@ use cli::Cli;
 use config::Config;
 use rect::AtomicRect;
 
-fn setup_logging() -> Result<()> {
-    let log_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("viewport2")
-        .join("logs");
-
-    fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
-
-    let log_file = log_dir.join("viewport2.log");
-
-    let target = Box::new(
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file)
-            .context("Failed to open log file")?,
-    );
-
-    env_logger::Builder::from_default_env()
-        .target(env_logger::Target::Pipe(target))
-        .init();
-
-    info!("Logging initialized, writing to: {}", log_file.display());
-    Ok(())
-}
-
+#[instrument(skip(config))]
 fn preflight_checks(config: &Config) -> Result<()> {
-    // Check v4l2loopback device exists
     let device = std::path::Path::new(&config.device);
     if !device.exists() {
         eyre::bail!(
@@ -62,7 +36,6 @@ fn preflight_checks(config: &Config) -> Result<()> {
         );
     }
 
-    // Check device is writable
     if let Err(e) = fs::OpenOptions::new().write(true).open(device) {
         eyre::bail!(
             "Cannot open '{}' for writing: {}\n\
@@ -74,18 +47,27 @@ fn preflight_checks(config: &Config) -> Result<()> {
         );
     }
 
+    tracing::debug!(device = %config.device, "preflight checks passed");
     Ok(())
 }
 
 fn main() -> Result<()> {
-    setup_logging().context("Failed to setup logging")?;
-
     let cli = Cli::parse();
+
+    let level = logging::resolve_log_level(cli.log_level.as_deref());
+    #[allow(unused_variables)]
+    let guard = logging::setup_tracing(&level).context("Failed to setup tracing")?;
+
     let mut config = Config::load(&cli).context("Failed to load configuration")?;
 
-    info!("Starting viewport2 with config: {:?}", config);
+    tracing::info!(
+        version = env!("GIT_DESCRIBE"),
+        device = %config.device,
+        output_size = %config.output_size,
+        fps = config.fps,
+        "viewport2 starting"
+    );
 
-    // Preflight: verify device exists and is writable
     preflight_checks(&config)?;
 
     // First-run hint: always-on-top requires manual user action on Wayland
@@ -112,7 +94,7 @@ fn main() -> Result<()> {
     if let Some(token) = &session.restore_token {
         config.portal_restore_token = Some(token.clone());
         if let Err(e) = config.save() {
-            log::warn!("Failed to save portal restore token: {}", e);
+            tracing::warn!(error = %e, "failed to save portal restore token");
         }
     }
 
@@ -126,7 +108,7 @@ fn main() -> Result<()> {
         .name("pipewire-capture".into())
         .spawn(move || {
             if let Err(e) = capture::run_pipewire_stream(session, frame_tx) {
-                log::error!("PipeWire capture failed: {}", e);
+                tracing::error!(error = %e, "PipeWire capture failed");
             }
         })
         .context("Failed to spawn PipeWire capture thread")?;
@@ -151,5 +133,6 @@ fn main() -> Result<()> {
     drop(output_handle);
     drop(pw_handle);
 
+    tracing::info!("viewport2 shutting down");
     Ok(())
 }

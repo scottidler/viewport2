@@ -98,7 +98,7 @@ impl Config {
                 match Self::load_from_file(&primary_config) {
                     Ok(config) => return config,
                     Err(e) => {
-                        log::warn!("Failed to load config from {}: {}", primary_config.display(), e);
+                        tracing::warn!("Failed to load config from {}: {}", primary_config.display(), e);
                     }
                 }
             }
@@ -110,19 +110,19 @@ impl Config {
             match Self::load_from_file(&fallback_config) {
                 Ok(config) => return config,
                 Err(e) => {
-                    log::warn!("Failed to load config from {}: {}", fallback_config.display(), e);
+                    tracing::warn!("Failed to load config from {}: {}", fallback_config.display(), e);
                 }
             }
         }
 
-        log::info!("No config file found, using defaults");
+        tracing::info!("No config file found, using defaults");
         Self::default()
     }
 
     fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(&path).context("Failed to read config file")?;
         let config: Self = serde_yaml::from_str(&content).context("Failed to parse config file")?;
-        log::info!("Loaded config from: {}", path.as_ref().display());
+        tracing::info!("Loaded config from: {}", path.as_ref().display());
         Ok(config)
     }
 
@@ -135,7 +135,7 @@ impl Config {
             }
             let content = serde_yaml::to_string(self).context("Failed to serialize config")?;
             fs::write(&config_path, content).context("Failed to write config file")?;
-            log::info!("Saved config to: {}", config_path.display());
+            tracing::info!("Saved config to: {}", config_path.display());
         }
         Ok(())
     }

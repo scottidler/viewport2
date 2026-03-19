@@ -31,7 +31,7 @@ impl Converter {
             YuvStandardMatrix::Bt601,
             YuvConversionMode::Balanced,
         ) {
-            log::error!("bgra_to_yuv422 failed: {:?}", e);
+            tracing::error!("bgra_to_yuv422 failed: {:?}", e);
             return;
         }
 
@@ -45,7 +45,7 @@ impl Converter {
         };
 
         if let Err(e) = yuvutils_rs::yuv422_to_yuyv422(&mut packed, &self.planar.to_fixed()) {
-            log::error!("yuv422_to_yuyv422 failed: {:?}", e);
+            tracing::error!("yuv422_to_yuyv422 failed: {:?}", e);
         }
     }
 }
