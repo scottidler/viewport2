@@ -13,6 +13,8 @@ use std::path::PathBuf;
 mod capture;
 mod cli;
 mod config;
+mod convert;
+mod output;
 mod overlay;
 mod rect;
 
@@ -76,7 +78,6 @@ fn main() -> Result<()> {
     let (frame_tx, frame_rx) = mpsc::sync_channel::<capture::Frame>(2);
 
     // Spawn PipeWire capture on a background thread
-    let pw_rect = shared_rect.clone();
     let pw_handle = std::thread::Builder::new()
         .name("pipewire-capture".into())
         .spawn(move || {
@@ -86,34 +87,66 @@ fn main() -> Result<()> {
         })
         .context("Failed to spawn PipeWire capture thread")?;
 
-    // Consume frames in the background (will be replaced by v4l2 output in Phase 3)
-    let output_rect = pw_rect;
+    // v4l2loopback output thread: resize -> BGRx-to-YUYV -> write
+    let output_width = config.output_size.width;
+    let output_height = config.output_size.height;
+    let device = config.device.clone();
     let output_handle = std::thread::Builder::new()
-        .name("frame-consumer".into())
+        .name("v4l2-output".into())
         .spawn(move || {
+            let mut v4l2 = match output::V4l2Output::open(&device, output_width, output_height) {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("Failed to open v4l2loopback: {}", e);
+                    return;
+                }
+            };
+
+            let mut resize_buf = vec![0u8; (output_width * output_height * 4) as usize];
+            let mut yuyv_buf = vec![0u8; (output_width * output_height * 2) as usize];
             let mut count = 0u64;
+
             while let Ok(frame) = frame_rx.recv() {
-                let r = output_rect.get();
-                // Update position tracking from overlay
-                output_rect.set_position(r.x, r.y);
+                // Resize source frame to output resolution (nearest-neighbor)
+                convert::resize_bgrx_nearest(
+                    &frame.data,
+                    frame.width,
+                    frame.height,
+                    frame.stride,
+                    &mut resize_buf,
+                    output_width,
+                    output_height,
+                );
+
+                // Convert BGRx -> YUYV
+                convert::bgrx_to_yuyv(
+                    &resize_buf,
+                    output_width,
+                    output_height,
+                    output_width * 4,
+                    &mut yuyv_buf,
+                );
+
+                // Write to v4l2loopback device
+                if let Err(e) = v4l2.write_frame(&yuyv_buf) {
+                    log::error!("Failed to write frame: {}", e);
+                    break;
+                }
+
                 count += 1;
                 if count.is_multiple_of(30) {
                     log::info!(
-                        "Frame {}: {}x{} stride={} ({} bytes), overlay={}x{} at ({},{})",
+                        "Written {} frames to v4l2loopback ({}x{} -> {}x{})",
                         count,
                         frame.width,
                         frame.height,
-                        frame.stride,
-                        frame.data.len(),
-                        r.width,
-                        r.height,
-                        r.x,
-                        r.y,
+                        output_width,
+                        output_height,
                     );
                 }
             }
         })
-        .context("Failed to spawn frame consumer thread")?;
+        .context("Failed to spawn v4l2 output thread")?;
 
     // Run overlay on main thread (GTK4 requires main thread)
     overlay::run(&config, shared_rect)?;

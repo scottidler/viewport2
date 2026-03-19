@@ -38,6 +38,7 @@ impl AtomicRect {
         }
     }
 
+    #[allow(dead_code)] // Used in Phase 4 (crop to overlay rect)
     pub fn set_position(&self, x: i32, y: i32) {
         self.x.store(x, Ordering::Relaxed);
         self.y.store(y, Ordering::Relaxed);
