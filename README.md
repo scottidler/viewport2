@@ -47,17 +47,44 @@ And configure options in `/etc/modprobe.d/v4l2loopback.conf`:
 options v4l2loopback devices=1 video_nr=10 card_label="Viewport" exclusive_caps=1
 ```
 
+## Quick Start
+
+```bash
+# 1. Load the virtual camera kernel module (one-time, or add to boot config above)
+sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="Viewport" exclusive_caps=1
+
+# 2. Start viewport2
+viewport2
+
+# 3. A portal dialog appears asking for screen capture permission - approve it
+#    (This is remembered for future runs)
+
+# 4. A red-bordered overlay frame appears on your desktop
+
+# 5. Right-click the viewport2 window in the GNOME top bar and select
+#    "Always on Top" so the frame stays visible over other windows
+
+# 6. Open Google Meet (or Slack, Zoom, etc.)
+#    Go to Settings > Video > Camera and select "Viewport"
+
+# 7. Position and resize the overlay frame over the area you want to share
+#    - Drag the interior to move the window
+#    - Drag edges/corners to resize
+#    - Use arrow keys to fine-tune crop position
+#    - Press 1/2/3 for preset sizes
+
+# 8. Your meeting participants now see exactly what's inside the red frame
+
+# 9. Press Escape to quit when done
+```
+
 ## Usage
 
 ```bash
 viewport2
 ```
 
-On first run, a portal dialog asks for screen capture permission. This is remembered for subsequent runs.
-
-A red-bordered overlay frame appears on your desktop. In Google Meet or Slack, select "Viewport" as your camera source.
-
-**Always-on-top:** Right-click the viewport2 window title in the GNOME top bar (or Super+right-click the window) and select "Always on Top." This keeps the overlay visible above other windows. GTK4 on Wayland does not support programmatic always-on-top, so this is a one-time manual step.
+The workflow is: viewport2 captures your full screen via PipeWire, crops to the overlay frame's position and size, converts to YUYV, and writes to a v4l2loopback virtual camera device. Any app that can select a camera (Meet, Slack, Zoom, OBS) will see "Viewport" as an available camera source showing exactly what's inside the red frame.
 
 ### CLI options
 
@@ -69,10 +96,12 @@ Options:
   -d, --device <PATH>         v4l2loopback device path [default: /dev/video10]
   -s, --size <WxH>            Initial overlay size [default: 1280x720]
   -f, --fps <N>               Target frame rate [default: 30]
+  -l, --log-level <LEVEL>     Log level: trace, debug, info, warn, error [default: info]
       --color <HEX>           Border color [default: #ff3333]
       --border-width <PX>     Border width [default: 4]
-  -v, --verbose               Enable verbose output
 ```
+
+You can also set the log level via the `VIEWPORT2_LOG` environment variable. Logs are written to `~/.local/share/viewport2/logs/` with daily rotation.
 
 ### Keyboard shortcuts
 
