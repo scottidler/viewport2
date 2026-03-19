@@ -16,6 +16,7 @@ mod config;
 mod convert;
 mod output;
 mod overlay;
+mod pipeline;
 mod rect;
 
 use cli::Cli;
@@ -123,83 +124,17 @@ fn main() -> Result<()> {
         .context("Failed to spawn PipeWire capture thread")?;
 
     // v4l2loopback output thread: crop -> resize -> BGRx-to-YUYV -> write
-    let output_width = config.output_size.width;
-    let output_height = config.output_size.height;
-    let device = config.device.clone();
-    let target_fps = config.fps;
+    let pipeline_config = pipeline::PipelineConfig {
+        device: config.device.clone(),
+        output_width: config.output_size.width,
+        output_height: config.output_size.height,
+        target_fps: config.fps,
+    };
     let output_rect = shared_rect.clone();
     let output_handle = std::thread::Builder::new()
         .name("v4l2-output".into())
-        .spawn(move || {
-            let mut v4l2 = match output::V4l2Output::open(&device, output_width, output_height) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Failed to open v4l2loopback: {}", e);
-                    return;
-                }
-            };
-
-            let mut resize_buf = vec![0u8; (output_width * output_height * 4) as usize];
-            let mut yuyv_buf = vec![0u8; (output_width * output_height * 2) as usize];
-            let mut count = 0u64;
-            let frame_interval = std::time::Duration::from_nanos(1_000_000_000 / target_fps as u64);
-            let mut next_frame_time = std::time::Instant::now();
-
-            while let Ok(frame) = frame_rx.recv() {
-                // FPS throttle: skip frames that arrive faster than target fps
-                let now = std::time::Instant::now();
-                if now < next_frame_time {
-                    continue;
-                }
-                next_frame_time = now + frame_interval;
-
-                // Crop to overlay rect
-                let crop_rect = output_rect.get();
-                let (cropped, crop_w, crop_h) =
-                    convert::crop_bgrx(&frame.data, frame.width, frame.height, frame.stride, &crop_rect);
-
-                // Resize cropped region to output resolution
-                convert::resize_bgrx_nearest(
-                    &cropped,
-                    crop_w,
-                    crop_h,
-                    crop_w * 4,
-                    &mut resize_buf,
-                    output_width,
-                    output_height,
-                );
-
-                // Convert BGRx -> YUYV
-                convert::bgrx_to_yuyv(
-                    &resize_buf,
-                    output_width,
-                    output_height,
-                    output_width * 4,
-                    &mut yuyv_buf,
-                );
-
-                // Write to v4l2loopback device
-                if let Err(e) = v4l2.write_frame(&yuyv_buf) {
-                    log::error!("Failed to write frame: {}", e);
-                    break;
-                }
-
-                count += 1;
-                if count.is_multiple_of(30) {
-                    log::info!(
-                        "Written {} frames (crop {}x{} at {},{} -> {}x{})",
-                        count,
-                        crop_rect.width,
-                        crop_rect.height,
-                        crop_rect.x,
-                        crop_rect.y,
-                        output_width,
-                        output_height,
-                    );
-                }
-            }
-        })
-        .context("Failed to spawn v4l2 output thread")?;
+        .spawn(move || pipeline::run(pipeline_config, frame_rx, output_rect))
+        .context("Failed to spawn pipeline thread")?;
 
     // Run overlay on main thread (GTK4 requires main thread)
     overlay::run(&config, shared_rect)?;
