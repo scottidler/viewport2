@@ -25,6 +25,7 @@ pub fn run(config: PipelineConfig, frame_rx: mpsc::Receiver<Frame>, shared_rect:
         }
     };
 
+    let mut converter = convert::Converter::new(config.output_width, config.output_height);
     let mut resize_buf = vec![0u8; (config.output_width * config.output_height * 4) as usize];
     let mut yuyv_buf = vec![0u8; (config.output_width * config.output_height * 2) as usize];
     let mut count = 0u64;
@@ -55,14 +56,8 @@ pub fn run(config: PipelineConfig, frame_rx: mpsc::Receiver<Frame>, shared_rect:
             config.output_height,
         );
 
-        // Convert BGRx -> YUYV
-        convert::bgrx_to_yuyv(
-            &resize_buf,
-            config.output_width,
-            config.output_height,
-            config.output_width * 4,
-            &mut yuyv_buf,
-        );
+        // Convert BGRx -> YUYV (SIMD-accelerated via yuvutils-rs)
+        converter.bgrx_to_yuyv(&resize_buf, config.output_width * 4, &mut yuyv_buf);
 
         // Write to v4l2loopback device
         if let Err(e) = v4l2.write_frame(&yuyv_buf) {

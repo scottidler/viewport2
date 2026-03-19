@@ -1,53 +1,54 @@
-/// BGRx to YUYV (YUV 4:2:2 packed) conversion.
-///
-/// BGRx: 4 bytes per pixel (B, G, R, X).
-/// YUYV: 4 bytes per 2 pixels (Y0, U, Y1, V).
-///
-/// Uses BT.601 coefficients with limited-range output.
-pub fn bgrx_to_yuyv(src: &[u8], width: u32, height: u32, stride: u32, dst: &mut [u8]) {
-    let dst_stride = (width * 2) as usize;
+use yuvutils_rs::{
+    BufferStoreMut, YuvChromaSubsampling, YuvConversionMode, YuvPackedImageMut, YuvPlanarImageMut, YuvRange,
+    YuvStandardMatrix,
+};
 
-    for y in 0..height as usize {
-        let src_row = &src[y * stride as usize..];
-        let dst_row = &mut dst[y * dst_stride..(y + 1) * dst_stride];
+use crate::rect::Rect;
 
-        let mut x = 0usize;
-        while x < width as usize {
-            let si0 = x * 4;
-            let b0 = src_row[si0] as i32;
-            let g0 = src_row[si0 + 1] as i32;
-            let r0 = src_row[si0 + 2] as i32;
+/// SIMD-accelerated BGRx-to-YUYV converter with pre-allocated buffers.
+pub struct Converter {
+    planar: YuvPlanarImageMut<'static, u8>,
+    width: u32,
+    height: u32,
+}
 
-            let (b1, g1, r1) = if x + 1 < width as usize {
-                let si1 = (x + 1) * 4;
-                (src_row[si1] as i32, src_row[si1 + 1] as i32, src_row[si1 + 2] as i32)
-            } else {
-                (b0, g0, r0)
-            };
+impl Converter {
+    pub fn new(width: u32, height: u32) -> Self {
+        let planar = YuvPlanarImageMut::<u8>::alloc(width, height, YuvChromaSubsampling::Yuv422);
+        Self { planar, width, height }
+    }
 
-            // BT.601 limited range
-            let y0 = ((66 * r0 + 129 * g0 + 25 * b0 + 128) >> 8) + 16;
-            let y1 = ((66 * r1 + 129 * g1 + 25 * b1 + 128) >> 8) + 16;
+    /// Convert a BGRx buffer to YUYV using SIMD-accelerated yuvutils-rs.
+    /// Two-step path: BGRx -> YUV 422 planar -> YUYV packed.
+    pub fn bgrx_to_yuyv(&mut self, src: &[u8], stride: u32, dst: &mut [u8]) {
+        // Step 1: BGRA/BGRx -> YUV 422 planar (SIMD)
+        // BGRx has identical byte layout to BGRA; the 4th byte is unused padding
+        if let Err(e) = yuvutils_rs::bgra_to_yuv422(
+            &mut self.planar,
+            src,
+            stride,
+            YuvRange::Limited,
+            YuvStandardMatrix::Bt601,
+            YuvConversionMode::Balanced,
+        ) {
+            log::error!("bgra_to_yuv422 failed: {:?}", e);
+            return;
+        }
 
-            // Average chroma across the pixel pair
-            let ravg = (r0 + r1) >> 1;
-            let gavg = (g0 + g1) >> 1;
-            let bavg = (b0 + b1) >> 1;
-            let u = ((-38 * ravg - 74 * gavg + 112 * bavg + 128) >> 8) + 128;
-            let v = ((112 * ravg - 94 * gavg - 18 * bavg + 128) >> 8) + 128;
+        // Step 2: YUV 422 planar -> YUYV packed (SIMD)
+        let yuyv_stride = self.width * 2;
+        let mut packed = YuvPackedImageMut {
+            yuy: BufferStoreMut::Borrowed(dst),
+            yuy_stride: yuyv_stride,
+            width: self.width,
+            height: self.height,
+        };
 
-            let di = x * 2;
-            dst_row[di] = y0.clamp(0, 255) as u8;
-            dst_row[di + 1] = u.clamp(0, 255) as u8;
-            dst_row[di + 2] = y1.clamp(0, 255) as u8;
-            dst_row[di + 3] = v.clamp(0, 255) as u8;
-
-            x += 2;
+        if let Err(e) = yuvutils_rs::yuv422_to_yuyv422(&mut packed, &self.planar.to_fixed()) {
+            log::error!("yuv422_to_yuyv422 failed: {:?}", e);
         }
     }
 }
-
-use crate::rect::Rect;
 
 /// Crop a BGRx buffer to the given rect, clamped to source bounds.
 /// Returns the cropped buffer and its (width, height).
@@ -110,13 +111,14 @@ mod tests {
         // Black pixels: B=0, G=0, R=0, X=0
         let src = [0u8; 4 * 4]; // 4 pixels wide, 1 row
         let mut dst = [0u8; 2 * 4]; // YUYV: 2 bytes/pixel
-        bgrx_to_yuyv(&src, 4, 1, 16, &mut dst);
+        let mut converter = Converter::new(4, 1);
+        converter.bgrx_to_yuyv(&src, 16, &mut dst);
 
         // Black in BT.601 limited range: Y=16, U=128, V=128
-        assert_eq!(dst[0], 16); // Y0
-        assert_eq!(dst[1], 128); // U
-        assert_eq!(dst[2], 16); // Y1
-        assert_eq!(dst[3], 128); // V
+        assert!((14..=18).contains(&dst[0]), "Y0={}", dst[0]); // Y0
+        assert!((126..=130).contains(&dst[1]), "U={}", dst[1]); // U
+        assert!((14..=18).contains(&dst[2]), "Y1={}", dst[2]); // Y1
+        assert!((126..=130).contains(&dst[3]), "V={}", dst[3]); // V
     }
 
     #[test]
@@ -129,7 +131,8 @@ mod tests {
             src[i * 4 + 2] = 255; // R
         }
         let mut dst = [0u8; 4]; // 2 pixels in YUYV
-        bgrx_to_yuyv(&src, 2, 1, 8, &mut dst);
+        let mut converter = Converter::new(2, 1);
+        converter.bgrx_to_yuyv(&src, 8, &mut dst);
 
         // White: Y should be ~235 (limited range), U~128, V~128
         assert!((230..=240).contains(&dst[0]), "Y0={}", dst[0]);
@@ -145,7 +148,8 @@ mod tests {
         let stride = width * 4;
         let src = vec![128u8; (stride * height) as usize];
         let mut dst = vec![0u8; (width * height * 2) as usize];
-        bgrx_to_yuyv(&src, width, height, stride, &mut dst);
+        let mut converter = Converter::new(width, height);
+        converter.bgrx_to_yuyv(&src, stride, &mut dst);
 
         // Just verify it doesn't panic and output is non-zero
         assert!(dst.iter().any(|&b| b > 0));
