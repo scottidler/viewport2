@@ -47,6 +47,36 @@ pub fn bgrx_to_yuyv(src: &[u8], width: u32, height: u32, stride: u32, dst: &mut 
     }
 }
 
+use crate::rect::Rect;
+
+/// Crop a BGRx buffer to the given rect, clamped to source bounds.
+/// Returns the cropped buffer and its (width, height).
+pub fn crop_bgrx(src: &[u8], src_width: u32, src_height: u32, src_stride: u32, rect: &Rect) -> (Vec<u8>, u32, u32) {
+    // Clamp crop rect to source bounds
+    let x0 = (rect.x.max(0) as u32).min(src_width);
+    let y0 = (rect.y.max(0) as u32).min(src_height);
+    let x1 = ((rect.x.max(0) as u32).saturating_add(rect.width)).min(src_width);
+    let y1 = ((rect.y.max(0) as u32).saturating_add(rect.height)).min(src_height);
+
+    let crop_w = x1.saturating_sub(x0);
+    let crop_h = y1.saturating_sub(y0);
+
+    if crop_w == 0 || crop_h == 0 {
+        return (vec![0u8; 4], 1, 1);
+    }
+
+    let dst_stride = crop_w as usize * 4;
+    let mut dst = vec![0u8; dst_stride * crop_h as usize];
+
+    for row in 0..crop_h as usize {
+        let src_offset = (y0 as usize + row) * src_stride as usize + x0 as usize * 4;
+        let dst_offset = row * dst_stride;
+        dst[dst_offset..dst_offset + dst_stride].copy_from_slice(&src[src_offset..src_offset + dst_stride]);
+    }
+
+    (dst, crop_w, crop_h)
+}
+
 /// Nearest-neighbor resize of a BGRx buffer.
 pub fn resize_bgrx_nearest(
     src: &[u8],
@@ -149,5 +179,58 @@ mod tests {
         assert_eq!(&dst[0..4], &[10, 20, 30, 0]);
         // Pixel 1: maps to src(2,0) = [70,80,90,0]
         assert_eq!(&dst[4..8], &[70, 80, 90, 0]);
+    }
+
+    #[test]
+    fn test_crop_bgrx_basic() {
+        // 4x2 source, crop center 2x1 at (1,0)
+        let src = vec![
+            // Row 0: pixels [A, B, C, D]
+            10, 10, 10, 0, 20, 20, 20, 0, 30, 30, 30, 0, 40, 40, 40, 0, // Row 1: pixels [E, F, G, H]
+            50, 50, 50, 0, 60, 60, 60, 0, 70, 70, 70, 0, 80, 80, 80, 0,
+        ];
+        let rect = Rect {
+            x: 1,
+            y: 0,
+            width: 2,
+            height: 1,
+        };
+        let (cropped, w, h) = crop_bgrx(&src, 4, 2, 16, &rect);
+        assert_eq!(w, 2);
+        assert_eq!(h, 1);
+        // Should get pixels B and C
+        assert_eq!(&cropped[0..4], &[20, 20, 20, 0]);
+        assert_eq!(&cropped[4..8], &[30, 30, 30, 0]);
+    }
+
+    #[test]
+    fn test_crop_bgrx_clamped_to_bounds() {
+        // 4x2 source, crop rect extends beyond source
+        let src = vec![0u8; 4 * 4 * 2]; // 4x2 BGRx
+        let rect = Rect {
+            x: 3,
+            y: 1,
+            width: 10,
+            height: 10,
+        };
+        let (_, w, h) = crop_bgrx(&src, 4, 2, 16, &rect);
+        // Clamped: x0=3, y0=1, x1=4, y1=2 -> 1x1
+        assert_eq!(w, 1);
+        assert_eq!(h, 1);
+    }
+
+    #[test]
+    fn test_crop_bgrx_zero_size() {
+        let src = vec![0u8; 16]; // 1x1 BGRx
+        let rect = Rect {
+            x: 5,
+            y: 5,
+            width: 10,
+            height: 10,
+        };
+        let (_, w, h) = crop_bgrx(&src, 1, 1, 4, &rect);
+        // Fully out of bounds -> returns 1x1 black
+        assert_eq!(w, 1);
+        assert_eq!(h, 1);
     }
 }

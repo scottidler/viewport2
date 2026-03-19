@@ -87,10 +87,12 @@ fn main() -> Result<()> {
         })
         .context("Failed to spawn PipeWire capture thread")?;
 
-    // v4l2loopback output thread: resize -> BGRx-to-YUYV -> write
+    // v4l2loopback output thread: crop -> resize -> BGRx-to-YUYV -> write
     let output_width = config.output_size.width;
     let output_height = config.output_size.height;
     let device = config.device.clone();
+    let target_fps = config.fps;
+    let output_rect = shared_rect.clone();
     let output_handle = std::thread::Builder::new()
         .name("v4l2-output".into())
         .spawn(move || {
@@ -105,14 +107,28 @@ fn main() -> Result<()> {
             let mut resize_buf = vec![0u8; (output_width * output_height * 4) as usize];
             let mut yuyv_buf = vec![0u8; (output_width * output_height * 2) as usize];
             let mut count = 0u64;
+            let frame_interval = std::time::Duration::from_nanos(1_000_000_000 / target_fps as u64);
+            let mut next_frame_time = std::time::Instant::now();
 
             while let Ok(frame) = frame_rx.recv() {
-                // Resize source frame to output resolution (nearest-neighbor)
+                // FPS throttle: skip frames that arrive faster than target fps
+                let now = std::time::Instant::now();
+                if now < next_frame_time {
+                    continue;
+                }
+                next_frame_time = now + frame_interval;
+
+                // Crop to overlay rect
+                let crop_rect = output_rect.get();
+                let (cropped, crop_w, crop_h) =
+                    convert::crop_bgrx(&frame.data, frame.width, frame.height, frame.stride, &crop_rect);
+
+                // Resize cropped region to output resolution
                 convert::resize_bgrx_nearest(
-                    &frame.data,
-                    frame.width,
-                    frame.height,
-                    frame.stride,
+                    &cropped,
+                    crop_w,
+                    crop_h,
+                    crop_w * 4,
                     &mut resize_buf,
                     output_width,
                     output_height,
@@ -136,10 +152,12 @@ fn main() -> Result<()> {
                 count += 1;
                 if count.is_multiple_of(30) {
                     log::info!(
-                        "Written {} frames to v4l2loopback ({}x{} -> {}x{})",
+                        "Written {} frames (crop {}x{} at {},{} -> {}x{})",
                         count,
-                        frame.width,
-                        frame.height,
+                        crop_rect.width,
+                        crop_rect.height,
+                        crop_rect.x,
+                        crop_rect.y,
                         output_width,
                         output_height,
                     );

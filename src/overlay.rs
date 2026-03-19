@@ -117,6 +117,7 @@ fn build_ui(app: &Application, config: &Config, shared_rect: Arc<AtomicRect>) ->
                 win_key.close();
                 gtk4::glib::Propagation::Stop
             }
+            // Ctrl+Arrow: resize
             gtk4::gdk::Key::Left if ctrl => {
                 let r = rect_key.get();
                 let new_w = r.width.saturating_sub(step);
@@ -153,6 +154,28 @@ fn build_ui(app: &Application, config: &Config, shared_rect: Arc<AtomicRect>) ->
                 label_key.set_text(&format!("{}x{}", r.width, new_h));
                 gtk4::glib::Propagation::Stop
             }
+            // Arrow keys (no ctrl): nudge crop position
+            gtk4::gdk::Key::Left if !ctrl => {
+                let r = rect_key.get();
+                rect_key.set_position(r.x - step as i32, r.y);
+                gtk4::glib::Propagation::Stop
+            }
+            gtk4::gdk::Key::Right if !ctrl => {
+                let r = rect_key.get();
+                rect_key.set_position(r.x + step as i32, r.y);
+                gtk4::glib::Propagation::Stop
+            }
+            gtk4::gdk::Key::Up if !ctrl => {
+                let r = rect_key.get();
+                rect_key.set_position(r.x, r.y - step as i32);
+                gtk4::glib::Propagation::Stop
+            }
+            gtk4::gdk::Key::Down if !ctrl => {
+                let r = rect_key.get();
+                rect_key.set_position(r.x, r.y + step as i32);
+                gtk4::glib::Propagation::Stop
+            }
+            // Preset sizes
             v @ (gtk4::gdk::Key::_1 | gtk4::gdk::Key::_2 | gtk4::gdk::Key::_3 | gtk4::gdk::Key::_4) => {
                 let idx = match v {
                     gtk4::gdk::Key::_1 => 0,
