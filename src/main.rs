@@ -48,6 +48,34 @@ fn setup_logging() -> Result<()> {
     Ok(())
 }
 
+fn preflight_checks(config: &Config) -> Result<()> {
+    // Check v4l2loopback device exists
+    let device = std::path::Path::new(&config.device);
+    if !device.exists() {
+        eyre::bail!(
+            "v4l2loopback device '{}' not found.\n\
+             Load the kernel module with:\n  \
+             sudo modprobe v4l2loopback devices=1 video_nr={} card_label=\"Viewport\" exclusive_caps=1",
+            config.device,
+            config.device.strip_prefix("/dev/video").unwrap_or("10")
+        );
+    }
+
+    // Check device is writable
+    if let Err(e) = fs::OpenOptions::new().write(true).open(device) {
+        eyre::bail!(
+            "Cannot open '{}' for writing: {}\n\
+             Ensure your user is in the 'video' group:\n  \
+             sudo usermod -aG video $USER\n  \
+             (then log out and back in)",
+            config.device,
+            e
+        );
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     setup_logging().context("Failed to setup logging")?;
 
@@ -56,13 +84,20 @@ fn main() -> Result<()> {
 
     info!("Starting viewport2 with config: {:?}", config);
 
+    // Preflight: verify device exists and is writable
+    preflight_checks(&config)?;
+
     // Negotiate screen capture via XDG portal (async)
     let session = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("Failed to create tokio runtime")?
         .block_on(capture::create_session(&config))
-        .context("Failed to create capture session")?;
+        .context(
+            "Screen capture denied or unavailable.\n\
+             Ensure XDG Desktop Portal is running (comes with GNOME).\n\
+             If the portal dialog was dismissed, try again - the permission prompt is required on first use.",
+        )?;
 
     // Persist the restore token so the user isn't prompted next time
     if let Some(token) = &session.restore_token {
