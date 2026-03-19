@@ -3,7 +3,6 @@
 #![deny(unused_variables)]
 
 use clap::Parser;
-use colored::*;
 use eyre::{Context, Result};
 use log::info;
 use std::fs;
@@ -11,12 +10,14 @@ use std::path::PathBuf;
 
 mod cli;
 mod config;
+mod overlay;
+mod rect;
 
 use cli::Cli;
 use config::Config;
+use rect::AtomicRect;
 
 fn setup_logging() -> Result<()> {
-    // Create log directory
     let log_dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("viewport2")
@@ -26,7 +27,6 @@ fn setup_logging() -> Result<()> {
 
     let log_file = log_dir.join("viewport2.log");
 
-    // Setup env_logger with file output
     let target = Box::new(
         fs::OpenOptions::new()
             .create(true)
@@ -43,43 +43,17 @@ fn setup_logging() -> Result<()> {
     Ok(())
 }
 
-fn run_application(cli: &Cli, config: &Config) -> Result<()> {
-    info!("Starting application");
-
-    // Load and display configuration
-    println!("{}", "✓ Configuration loaded successfully".green());
-    if cli.verbose {
-        println!("{}", "🔍 Verbose mode enabled".yellow());
-    }
-    if config.debug {
-        println!("{}", "🔍 Debug mode enabled".yellow());
-    }
-
-    // Demonstrate colored output
-    println!("{} Hello from {}!", "🎉".green(), "viewport2".cyan());
-    println!("{} Author: {}", "👤".blue(), config.name);
-    println!("{} Age: {}", "📅".blue(), config.age);
-
-    // Log some information
-    info!("Application executed successfully");
-
-    Ok(())
-}
-
 fn main() -> Result<()> {
-    // Setup logging first
     setup_logging().context("Failed to setup logging")?;
 
-    // Parse CLI arguments
     let cli = Cli::parse();
+    let config = Config::load(&cli).context("Failed to load configuration")?;
 
-    // Load configuration
-    let config = Config::load(cli.config.as_ref()).context("Failed to load configuration")?;
+    info!("Starting viewport2 with config: {:?}", config);
 
-    info!("Starting with config from: {:?}", cli.config);
+    let shared_rect = AtomicRect::new(0, 0, config.initial_size.width, config.initial_size.height);
 
-    // Run the main application logic
-    run_application(&cli, &config).context("Application failed")?;
+    overlay::run(&config, shared_rect)?;
 
     Ok(())
 }
