@@ -57,6 +57,8 @@ On first run, a portal dialog asks for screen capture permission. This is rememb
 
 A red-bordered overlay frame appears on your desktop. In Google Meet or Slack, select "Viewport" as your camera source.
 
+**Always-on-top:** Right-click the viewport2 window title in the GNOME top bar (or Super+right-click the window) and select "Always on Top." This keeps the overlay visible above other windows. GTK4 on Wayland does not support programmatic always-on-top, so this is a one-time manual step.
+
 ### CLI options
 
 ```

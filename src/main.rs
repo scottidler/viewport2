@@ -88,6 +88,14 @@ fn main() -> Result<()> {
     // Preflight: verify device exists and is writable
     preflight_checks(&config)?;
 
+    // First-run hint: always-on-top requires manual user action on Wayland
+    if config.portal_restore_token.is_none() {
+        eprintln!(
+            "Tip: Right-click the viewport2 window in the GNOME top bar and select \
+             'Always on Top' to keep the overlay visible."
+        );
+    }
+
     // Negotiate screen capture via XDG portal (async)
     let session = tokio::runtime::Builder::new_current_thread()
         .enable_all()
