@@ -126,7 +126,6 @@ impl Config {
         Ok(config)
     }
 
-    #[allow(dead_code)]
     pub fn save(&self) -> Result<()> {
         if let Some(config_dir) = dirs::config_dir() {
             let project_name = env!("CARGO_PKG_NAME");
