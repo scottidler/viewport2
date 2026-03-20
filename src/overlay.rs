@@ -10,7 +10,7 @@ use gtk4::{Application, ApplicationWindow, CssProvider, EventControllerKey, Even
 use crate::config::Config;
 use crate::rect::AtomicRect;
 
-const APP_ID: &str = "com.scottidler.viewport2";
+const APP_ID: &str = "com.scottidler.viewport";
 
 /// Determine which edge/corner the cursor is near, if any.
 fn detect_edge(x: f64, y: f64, width: f64, height: f64, threshold: f64) -> Option<gdk::SurfaceEdge> {
@@ -101,7 +101,7 @@ fn build_ui(app: &Application, config: &Config, shared_rect: Arc<AtomicRect>) ->
 
     let window = ApplicationWindow::builder()
         .application(app)
-        .title("viewport2")
+        .title("viewport")
         .default_width(width)
         .default_height(height)
         .decorated(false)

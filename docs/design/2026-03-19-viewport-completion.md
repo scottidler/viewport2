@@ -1,4 +1,4 @@
-# Design Document: viewport2 Completion
+# Design Document: viewport Completion
 
 **Author:** Scott A. Idler
 **Date:** 2026-03-19
@@ -7,13 +7,13 @@
 
 ## Summary
 
-Close the remaining gaps between the original viewport2 design doc (2026-03-18) and the current implementation. Four items: extract `pipeline.rs` from inlined logic in `main.rs`, add edge/corner resize drag handles to the undecorated overlay window, document the always-on-top workflow (GTK4 on Wayland has no programmatic API), and replace the manual scalar BGRx-to-YUYV conversion with SIMD-accelerated `yuvutils-rs`.
+Close the remaining gaps between the original viewport design doc (2026-03-18) and the current implementation. Four items: extract `pipeline.rs` from inlined logic in `main.rs`, add edge/corner resize drag handles to the undecorated overlay window, document the always-on-top workflow (GTK4 on Wayland has no programmatic API), and replace the manual scalar BGRx-to-YUYV conversion with SIMD-accelerated `yuvutils-rs`.
 
 ## Problem Statement
 
 ### Background
 
-The original viewport2 design doc specified five phases. All five are implemented and shipped as v0.1.0, but an audit revealed four gaps where the implementation diverges from the spec.
+The original viewport design doc specified five phases. All five are implemented and shipped as v0.1.0, but an audit revealed four gaps where the implementation diverges from the spec.
 
 ### Problem
 
@@ -128,7 +128,7 @@ GTK4 on Wayland has no programmatic API for always-on-top. The `set_keep_above()
 
 **Changes:**
 - Update README "Usage" section to include the always-on-top step
-- Print a one-time hint to stderr on startup: `"Tip: Super+right-click the viewport2 window and select 'Always on Top'"` - only shown when no config file exists yet (first run)
+- Print a one-time hint to stderr on startup: `"Tip: Super+right-click the viewport window and select 'Always on Top'"` - only shown when no config file exists yet (first run)
 - Update the original design doc's risk table to reflect the actual Wayland limitation instead of claiming `set_keep_above()` works
 
 ### Phase 4: SIMD Conversion via yuvutils-rs
@@ -186,10 +186,10 @@ impl Converter {
 - **Description:** Use the wlr-layer-shell protocol to place the overlay on the compositor's overlay layer
 - **Pros:** Programmatic always-on-top, no user action needed
 - **Cons:** GNOME/Mutter does not implement wlr-layer-shell. Only works on wlroots (Sway, Hyprland) and Smithay (COSMIC) compositors.
-- **Why not chosen:** viewport2 targets GNOME/Mutter. This approach would break on the target platform.
+- **Why not chosen:** viewport targets GNOME/Mutter. This approach would break on the target platform.
 
 ### Alternative 3: GNOME Shell extension for always-on-top
-- **Description:** Ship a minimal GNOME Shell extension that watches for the viewport2 window and calls `meta_window.make_above()`
+- **Description:** Ship a minimal GNOME Shell extension that watches for the viewport window and calls `meta_window.make_above()`
 - **Pros:** Fully automatic, no user interaction
 - **Cons:** Requires separate install step, GNOME extension review, version-locked to GNOME Shell releases, adds maintenance burden
 - **Why not chosen:** Too heavy for a single feature. The user action (Super+right-click) is a one-time step.
@@ -218,7 +218,7 @@ impl Converter {
 
 ### Security
 
-No new security considerations. The yuvutils-rs crate uses `core::arch` SIMD intrinsics internally (unsafe blocks within the crate), but its public API is safe Rust. No new unsafe code in viewport2.
+No new security considerations. The yuvutils-rs crate uses `core::arch` SIMD intrinsics internally (unsafe blocks within the crate), but its public API is safe Rust. No new unsafe code in viewport.
 
 ### Testing Strategy
 
@@ -288,4 +288,4 @@ No new security considerations. The yuvutils-rs crate uses `core::arch` SIMD int
 - [GTK4 always-on-top removal discussion](https://discourse.gnome.org/t/gtk-4-how-to-replace-gtk-window-set-keep-above-and-gtk-window-set-keep-below/3550)
 - [gdk4::ToplevelExt::begin_resize](https://gtk-rs.org/gtk4-rs/stable/latest/docs/gdk4/struct.Toplevel.html)
 - [gdk4::SurfaceEdge](https://gtk-rs.org/gtk4-rs/stable/latest/docs/gdk4/enum.SurfaceEdge.html)
-- [Original viewport2 design doc](docs/design/2026-03-18-viewport2.md)
+- [Original viewport design doc](2026-03-18-viewport.md)

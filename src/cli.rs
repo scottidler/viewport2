@@ -3,10 +3,10 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "viewport2",
+    name = "viewport",
     about = "Draggable screen region capture tool that outputs to a virtual camera",
     version = env!("GIT_DESCRIBE"),
-    after_help = "Logs are written to: ~/.local/share/viewport2/logs/viewport2.log"
+    after_help = "Logs are written to: ~/.local/share/viewport/logs/viewport.log"
 )]
 pub struct Cli {
     /// Path to config file

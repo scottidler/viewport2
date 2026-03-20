@@ -1,8 +1,8 @@
-# viewport2
+# viewport
 
 Draggable screen region capture tool that outputs to a virtual camera for presentations.
 
-Share a laptop-sized portion of your 4K desktop in Google Meet or Slack without overwhelming the audience. Position a resizable overlay frame on your screen, and viewport2 outputs everything inside that frame as a virtual camera feed via v4l2loopback.
+Share a laptop-sized portion of your 4K desktop in Google Meet or Slack without overwhelming the audience. Position a resizable overlay frame on your screen, and viewport outputs everything inside that frame as a virtual camera feed via v4l2loopback.
 
 ## Prerequisites
 
@@ -53,15 +53,15 @@ options v4l2loopback devices=1 video_nr=10 card_label="Viewport" exclusive_caps=
 # 1. Load the virtual camera kernel module (one-time, or add to boot config above)
 sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="Viewport" exclusive_caps=1
 
-# 2. Start viewport2
-viewport2
+# 2. Start viewport
+viewport
 
 # 3. A portal dialog appears asking for screen capture permission - approve it
 #    (This is remembered for future runs)
 
 # 4. A red-bordered overlay frame appears on your desktop
 
-# 5. Right-click the viewport2 window in the GNOME top bar and select
+# 5. Right-click the viewport window in the GNOME top bar and select
 #    "Always on Top" so the frame stays visible over other windows
 
 # 6. Open Google Meet (or Slack, Zoom, etc.)
@@ -81,15 +81,15 @@ viewport2
 ## Usage
 
 ```bash
-viewport2
+viewport
 ```
 
-The workflow is: viewport2 captures your full screen via PipeWire, crops to the overlay frame's position and size, converts to YUYV, and writes to a v4l2loopback virtual camera device. Any app that can select a camera (Meet, Slack, Zoom, OBS) will see "Viewport" as an available camera source showing exactly what's inside the red frame.
+The workflow is: viewport captures your full screen via PipeWire, crops to the overlay frame's position and size, converts to YUYV, and writes to a v4l2loopback virtual camera device. Any app that can select a camera (Meet, Slack, Zoom, OBS) will see "Viewport" as an available camera source showing exactly what's inside the red frame.
 
 ### CLI options
 
 ```
-viewport2 [OPTIONS]
+viewport [OPTIONS]
 
 Options:
   -c, --config <PATH>         Path to config file
@@ -101,7 +101,7 @@ Options:
       --border-width <PX>     Border width [default: 4]
 ```
 
-You can also set the log level via the `VIEWPORT2_LOG` environment variable. Logs are written to `~/.local/share/viewport2/logs/` with daily rotation.
+You can also set the log level via the `VIEWPORT_LOG` environment variable. Logs are written to `~/.local/share/viewport/logs/` with daily rotation.
 
 ### Keyboard shortcuts
 
@@ -118,7 +118,7 @@ You can also set the log level via the `VIEWPORT2_LOG` environment variable. Log
 
 ### Config file
 
-Place at `~/.config/viewport2/viewport2.yml`:
+Place at `~/.config/viewport/viewport.yml`:
 
 ```yaml
 device: /dev/video10

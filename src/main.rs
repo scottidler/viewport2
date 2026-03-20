@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         device = %config.device,
         output_size = %config.output_size,
         fps = config.fps,
-        "viewport2 starting"
+        "viewport starting"
     );
 
     preflight_checks(&config)?;
@@ -73,7 +73,7 @@ fn main() -> Result<()> {
     // First-run hint: always-on-top requires manual user action on Wayland
     if config.portal_restore_token.is_none() {
         eprintln!(
-            "Tip: Right-click the viewport2 window in the GNOME top bar and select \
+            "Tip: Right-click the viewport window in the GNOME top bar and select \
              'Always on Top' to keep the overlay visible."
         );
     }
@@ -133,6 +133,6 @@ fn main() -> Result<()> {
     drop(output_handle);
     drop(pw_handle);
 
-    tracing::info!("viewport2 shutting down");
+    tracing::info!("viewport shutting down");
     Ok(())
 }

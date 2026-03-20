@@ -105,7 +105,7 @@ pub fn run_pipewire_stream(session: CaptureSession, frame_tx: mpsc::SyncSender<F
 
     let stream = pw::stream::StreamBox::new(
         &core,
-        "viewport2-capture",
+        "viewport-capture",
         pw::properties::properties! {
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Capture",
